@@ -22,24 +22,19 @@ use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
 use Number::Bytes::Human qw( format_bytes parse_bytes );
 use 5.10.0;
 
-route_doc upload   => "<filename>";
-route_doc content  => "<filename> <md5>";
-route_doc download => "<filename> <md5> [dir]";
-route_doc remove   => "<filename> <md5>";
-
 has bucket_map_cached  => sub { 0; }; # Computed on demand.
 
-route 'welcome'        => "GET",  '/';
-route 'bucket_map'     => "GET",  '/bucket_map';
-route 'disk_usage'     => "GET",  '/disk/usage';
-route 'bucket_usage'   => "GET",  '/bucket/usage';
-route 'servers_status' => "GET",  '/servers/status';
+route_doc 'send';
+route_doc 'retrieve';
 route 'get'            => "GET",  '/file', \"<md5> <filename>";
-route 'check'          => "HEAD", '/file', \"<md5> <filename>";
+route 'bucket_map'     => "GET",  '/bucket_map';
+route 'bucket_usage'   => "GET",  '/bucket/usage';
+route 'disk_usage'     => "GET",  '/disk/usage';
+route 'servers_status' => "GET",  '/servers/status';
 route 'set_status'     => "POST", '/disk/status';
+route 'check'          => "HEAD", '/file', \"<md5> <filename>";
 route 'check_files'    => "POST", '/check/manifest';
 
-route_meta 'welcome'        => { auto_failover => 1, dont_read_files => 1 };
 route_meta 'bucket_map'     => { auto_failover => 1, dont_read_files => 1 };
 route_meta 'disk_usage'     => { auto_failover => 1, dont_read_files => 1 };
 route_meta 'bucket_usage'   => { auto_failover => 1, dont_read_files => 1 };
@@ -52,18 +47,11 @@ route_meta 'check_files'    => { auto_failover => 1, dont_read_files => 1 };
 route_meta 'upload'         => { dont_read_files => 1 };
 route_meta 'download'       => { dont_read_files => 1 };
 route_meta 'check_manifest' => { dont_read_files => 1 };
-route_meta 'check'          => { dont_read_files => 1 };
 
-route_args send => [
-    { name => 'content',  type => '=s', required => 1 },
-    { name => 'name',     type => '=s' },
-];
+route_doc upload   => "<filename>";
+route_doc download => "<filename> <md5> [dir]";
 
-route_args retrieve => [
-    { name => 'location', type => '=s' },
-    { name => 'name',     type => '=s' },
-    { name => 'md5',      type => '=s' },
-];
+route_doc remove   => "<filename> <md5>";
 
 sub new {
     my $self = shift->SUPER::new(@_);
@@ -355,6 +343,10 @@ sub _rand_filename {
     return $a;
 }
 
+route_args send => [
+    { name => 'content',  type => '=s', required => 1 },
+    { name => 'name',     type => '=s' },
+];
 sub send {
     my $self = shift;
     my %args = $self->meta_for->process_args(@_);
@@ -365,6 +357,11 @@ sub send {
     return $self->res->headers->location;
 }
 
+route_args retrieve => [
+    { name => 'location', type => '=s' },
+    { name => 'name',     type => '=s' },
+    { name => 'md5',      type => '=s' },
+];
 sub retrieve {
     my $self = shift;
     my %args = $self->meta_for->process_args(@_);
@@ -481,6 +478,38 @@ __END__
 =head1 DESCRIPTION
 
 Client for L<Yars>.
+
+=head1 METHODS
+
+If a method accepts arguments, you can list them by typing
+
+    yarsclient help <method>
+
+=head2 B<bucket_map>
+
+Get the bucket map.
+
+=head2 B<send>
+
+Send content to the yars cluster.
+
+=head2 B<upload>
+
+Upload the given file to the yars cluster, by first computing the MD5
+and then sending a PUT request with the md5 in both the Content-MD5 header
+and in the URL.  The file is not read into memory before being sent.
+
+=head2 B<download>
+
+Download a file and save it to disk.  A URL is contructed using the md5
+and the filename, and the host is chosen using the bucket map.  Then a
+GET request is sent, and the response is sent directly to the disk.
+After downloading, the md5 is computed and verified.
+
+If there is an error downloading the file, download will automatically try all
+the other hosts in the cluster.
+
+The argument to download can be a URL instead of a filename and an md5.
 
 =head1 SEE ALSO
 
